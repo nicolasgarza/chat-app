@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package chat;
+
+option go_package="chat_app/chat";
+
+service ChatService {
+    rpc SendMessage(ChatMessage) returns (Empty);
+    rpc StreamMessages(Empty) returns (stream ChatMessage);
+  }
+
+message ChatMessage {
+    string user = 1;
+    string message = 2;
+    int64 timestamp = 3;
+  }
+
+message Empty {}
