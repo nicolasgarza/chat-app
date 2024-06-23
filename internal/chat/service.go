@@ -1,15 +1,20 @@
 package chat
 
 import (
+	"chat_app/internal/ratelimit"
 	pb "chat_app/pb"
 	"context"
 	// "chat_app/internal/storage"
-	// "chat_app/internal/auth"
 )
 
 type ChatServer struct {
 	pb.UnimplementedChatServiceServer
+	rateLimiter *ratelimit.RateLimiter
 	// more
+}
+
+func NewChatServer(rateLimiter *ratelimit.RateLimiter) *ChatServer {
+	// init new chat server
 }
 
 func (s *ChatServer) SendMessage(ctx context.Context, msg *pb.ChatMessage) (*pb.Empty, error) {
