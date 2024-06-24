@@ -1,13 +1,12 @@
 package main
 
 import (
-	"fmt"
-	// "log"
+	"log"
 	// "net"
 	// "google.golang.org/grpc"
 	// pb "chat_app/chat"
+	"chat_app/config"
 	"chat_app/internal/chat"
-	// "chat_app/config"
 	"chat_app/internal/logger"
 	"chat_app/internal/ratelimit"
 	"time"
@@ -16,12 +15,17 @@ import (
 )
 
 func main() {
-	fmt.Println("Entry point")
+	if err := config.LoadConfig(); err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
 	err := logger.InitLogger()
 	if err != nil {
-		// handle
+		log.Fatalf("Error initializing logger: %v", err)
 	}
-	defer logger.Sync()
+	defer logger.Log.Sync()
+
+	logger.Log.Info("Application started")
 
 	// init rate limiter
 	rateLimiter := ratelimit.NewRateLimiter(rate.Every(time.Second), 100)
