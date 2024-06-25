@@ -78,3 +78,17 @@ func GetMessages(client *redis.Client) ([]*pb.ChatMessage, error) {
 
 	return messages, nil
 }
+
+func PublishMessage(client *redis.Client, channel string, message *pb.ChatMessage) error {
+	ctx := context.Background()
+	jsonMessage, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+
+	return client.Publish(ctx, channel, jsonMessage).Err()
+}
+
+func SubscribeToMessages(client *redis.Client, channel string) *redis.PubSub {
+	return client.Subscribe(context.Background(), channel)
+}

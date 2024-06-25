@@ -7,6 +7,7 @@ import (
 	"chat_app/internal/chat"
 	"chat_app/internal/logger"
 	"chat_app/internal/ratelimit"
+	"chat_app/internal/storage"
 	pb "chat_app/pb"
 	"net"
 	"time"
@@ -33,7 +34,12 @@ func main() {
 	rateLimiter := ratelimit.NewRateLimiter(rate.Every(time.Second), 100)
 
 	// init chatserver
-	chatServer := chat.NewChatServer(rateLimiter)
+	redisClient, err := storage.NewRedisClient("localhost:6379")
+	if err != nil {
+		logger.Log.Fatal("Failed to connect to Redis", zap.Error(err))
+	}
+	defer redisClient.Close()
+	chatServer := chat.NewChatServer(rateLimiter, redisClient)
 
 	// initialize grpc server
 	lis, err := net.Listen("tcp", ":50051")
