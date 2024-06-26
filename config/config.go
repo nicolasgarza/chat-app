@@ -32,7 +32,7 @@ func LoadConfig() error {
 	v.SetDefault("logger.level", "info")
 
 	v.SetDefault("ratelimit.rate", "1s")
-	v.SetDefault("logger.level", 100)
+	v.SetDefault("ratelimit.burst", 100)
 
 	v.AutomaticEnv()
 

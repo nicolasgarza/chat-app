@@ -11,11 +11,19 @@ import (
 )
 
 func NewRedisClient(addr string) (*redis.Client, error) {
-	return redis.NewClient(&redis.Options{
+	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: "",
 		DB:       0,
-	}), nil
+	})
+
+	// Test the connection
+	_, err := client.Ping(context.Background()).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 func SaveMessage(client *redis.Client, message *pb.ChatMessage) error {

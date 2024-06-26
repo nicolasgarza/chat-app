@@ -41,7 +41,7 @@ func main() {
 	if err != nil {
 		logger.Log.Fatal("Failed to connect to Redis", zap.Error(err))
 	}
-	defer redisClient.Close()
+	logger.Log.Info("Successfully connected to Redis")
 	chatServer := chat.NewChatServer(rateLimiter, redisClient)
 
 	// initialize grpc server
@@ -56,7 +56,7 @@ func main() {
 	pb.RegisterChatServiceServer(grpcServer, chatServer)
 
 	// start listening
-	logger.Log.Info("Staarting gRPC server", zap.String("Address", lis.Addr().String()))
+	logger.Log.Info("Starting gRPC server", zap.String("Address", lis.Addr().String()))
 	if err := grpcServer.Serve(lis); err != nil {
 		logger.Log.Fatal("Failed to serve", zap.Error(err))
 	}
