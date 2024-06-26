@@ -10,8 +10,9 @@ type RateLimiter struct {
 }
 
 func NewRateLimiter(r rate.Limit, b int) *RateLimiter { // create a new rate limiter
+	return &RateLimiter{rate.NewLimiter(r, b)}
 }
 
 func (rl *RateLimiter) Allow() bool {
-	// check if the action is allowed by the rate limiter
+	return rl.limiter.Allow()
 }

@@ -31,7 +31,10 @@ func main() {
 
 	logger.Log.Info("Application started")
 
-	rateLimiter := ratelimit.NewRateLimiter(rate.Every(time.Second), 100)
+	rateLimiter := ratelimit.NewRateLimiter(
+		rate.Limit(float64(time.Second)/float64(config.AppConfig.RateLimit.Rate)),
+		config.AppConfig.RateLimit.Burst,
+	)
 
 	// init chatserver
 	redisClient, err := storage.NewRedisClient("localhost:6379")
