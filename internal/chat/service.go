@@ -7,10 +7,15 @@ import (
 	pb "chat_app/pb"
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	// "chat_app/internal/storage"
 )
@@ -75,4 +80,70 @@ func (s *ChatServer) StreamMessages(empty *pb.Empty, stream pb.ChatService_Strea
 
 	LogStreamEnded(nil)
 	return nil
+}
+
+func (s *ChatServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.AuthResponse, error) {
+	// check if usernamex already exists and hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to hash password")
+	}
+
+	// store username and hashed password in db
+	// Generate JWT token
+	token, err := generateToken(req.Username)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to generate token")
+	}
+	return &pb.AuthResponse{Token: token}, nil
+}
+
+func (s *ChatServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.AuthResponse, error) {
+	// Retrieve hashed password for username from database
+	// Compare passwords
+	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(req.Password))
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "Invalid credentials")
+	}
+
+	// Generate JWT token
+	token, err := generateToken(req.Username)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to generate token")
+	}
+	return &pb.AuthResponse{Token: token}, nil
+}
+
+func generateToken(username string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"username": username,
+		"exp":      time.Now().Add(time.Hour * 24).Unix(),
+	})
+	return token.SignedString([]byte("dogdogdog"))
+}
+
+func authInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	if info.FullMethod != "/ChatService/Register" && info.FullMethod != "/ChatService/Login" {
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			return nil, status.Errorf(codes.Unauthenticated, "No metadata provided")
+		}
+
+		token := md["authorization"]
+		if len(token) == 0 {
+			return nil, status.Errorf(codes.Unauthenticated, "No token provided")
+		}
+
+		claims := &jwt.MapClaims{}
+		_, err := jwt.ParseWithClaims(token[0], claims, func(token *jwt.Token) (interface{}, error) {
+			return []byte("dogdogdog"), nil
+		})
+		if err != nil {
+			return nil, status.Errorf(codes.Unauthenticated, "Invalid token")
+		}
+
+		newCtx := context.WithValue(ctx, "username", (*claims)["username"])
+		return handler(newCtx, req)
+	}
+	return handler(ctx, req)
 }
