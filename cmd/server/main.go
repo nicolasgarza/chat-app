@@ -44,6 +44,8 @@ func main() {
 	logger.Log.Info("Successfully connected to Redis")
 	chatServer := chat.NewChatServer(rateLimiter, redisClient)
 
+	go startWebServer(redisClient)
+
 	// initialize grpc server
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
