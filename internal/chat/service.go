@@ -33,6 +33,12 @@ func (s *ChatServer) SendMessage(ctx context.Context, msg *pb.ChatMessage) (*pb.
 		return nil, status.Errorf(codes.ResourceExhausted, "Rate limit exceeded")
 	}
 
+	if err := ValidateMessage(msg); err != nil {
+		return nil, err
+	}
+
+	LogMessageReceived(msg)
+
 	if err := storage.SaveMessage(s.redisClient, msg); err != nil {
 		logger.Log.Error("Failed to save message", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "Failed to save message")
@@ -48,6 +54,7 @@ func (s *ChatServer) SendMessage(ctx context.Context, msg *pb.ChatMessage) (*pb.
 }
 
 func (s *ChatServer) StreamMessages(empty *pb.Empty, stream pb.ChatService_StreamMessagesServer) error {
+	logger.Log.Info("New client connected to message stream")
 	pubsub := storage.SubscribeToMessages(s.redisClient, "chat_messages")
 	defer pubsub.Close()
 
@@ -61,10 +68,11 @@ func (s *ChatServer) StreamMessages(empty *pb.Empty, stream pb.ChatService_Strea
 		}
 
 		if err := stream.Send(&chatMessage); err != nil {
-			logger.Log.Error("Failed to send message to stream", zap.Error(err))
+			LogStreamEnded(err)
 			return err
 		}
 	}
 
+	LogStreamEnded(nil)
 	return nil
 }

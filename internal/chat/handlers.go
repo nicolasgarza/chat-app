@@ -10,16 +10,30 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func (s *ChatServer) HandleSendMessage(msg *pb.ChatMessage) error {
-	if !s.rateLimiter.Allow() {
-		logger.Log.Warn("Rate limit exceeded for send message")
-		return status.Error(codes.ResourceExhausted, "Rate Limit exceeded")
+func ValidateMessage(msg *pb.ChatMessage) error {
+	if msg.User == "" {
+		return status.Error(codes.InvalidArgument, "User must not be empty")
+	}
+	if msg.Message == "" {
+		return status.Error(codes.InvalidArgument, "Message must not be empty")
+	}
+	if msg.Timestamp == 0 {
+		return status.Error(codes.InvalidArgument, "Message must not be empty")
 	}
 
-	logger.Log.Info("Received message", zap.String("user", msg.User))
-	// Handle logic for sending message
+	return nil
 }
 
-func HandleStreamMessages(s *ChatServer, stream pb.ChatService_StreamMessagesServer) error {
-	// Handle streaming of messages
+func LogMessageReceived(msg *pb.ChatMessage) {
+	logger.Log.Info("Received message",
+		zap.String("user", msg.User),
+		zap.Int64("timestamp", msg.Timestamp))
+}
+
+func LogStreamEnded(err error) {
+	if err != nil {
+		logger.Log.Error("Client disconnected from message stream with error", zap.Error(err))
+	} else {
+		logger.Log.Info("Client disconnected from message stream")
+	}
 }
