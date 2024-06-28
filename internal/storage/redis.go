@@ -113,21 +113,26 @@ func SaveUser(client *redis.Client, username, hashedPassword string) error {
 
 func GetUser(client *redis.Client, username string) (string, error) {
 	ctx := context.Background()
-	key := fmt.Sprintf("token:%s", username)
+	key := fmt.Sprintf("user:%s", username)
 
 	return client.HGet(ctx, key, "password").Result()
 }
 
 func SaveToken(client *redis.Client, username, token string, expiration time.Duration) error {
 	ctx := context.Background()
-	key := fmt.Sprintf("token: %s", username)
+	key := fmt.Sprintf("token:%s", username)
 
-	return client.HSet(ctx, key, expiration).Err()
+	err := client.Set(ctx, key, token, expiration).Err()
+	if err != nil {
+		return fmt.Errorf("failed to save token: %v", err)
+	}
+
+	return nil
 }
 
 func GetToken(client *redis.Client, username string) (string, error) {
 	ctx := context.Background()
-	key := fmt.Sprintf("token: %s", username)
+	key := fmt.Sprintf("token:%s", username)
 
 	return client.Get(ctx, key).Result()
 }

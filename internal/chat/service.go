@@ -83,19 +83,26 @@ func (s *ChatServer) StreamMessages(empty *pb.Empty, stream pb.ChatService_Strea
 }
 
 func (s *ChatServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.AuthResponse, error) {
-	// check if usernamex already exists and hash password
+	// check if username already exists and hash password
 	_, err := storage.GetUser(s.redisClient, req.Username)
-	if err != nil {
+	if err == nil {
+		// user already exists
 		return nil, status.Errorf(codes.AlreadyExists, "Username already exists")
+	} else if err != redis.Nil {
+		// unexpected error
+		logger.Log.Error("Error checking user existence:", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "Error checking user existence")
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
+		logger.Log.Error("Error hashing password: ", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "Failed to hash password")
 	}
 
 	err = storage.SaveUser(s.redisClient, req.Username, string(hashedPassword))
 	if err != nil {
+		logger.Log.Error("Error saving user:", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "Failed to save user: %v", err)
 	}
 
@@ -103,11 +110,13 @@ func (s *ChatServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb
 	// Generate JWT token
 	token, err := generateToken(req.Username)
 	if err != nil {
+		logger.Log.Error("Error generating token:", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "Failed to generate token")
 	}
 
 	err = storage.SaveToken(s.redisClient, req.Username, token, 24*time.Hour)
 	if err != nil {
+		logger.Log.Error("Error saving token:", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "Failed to save token: %v", err)
 	}
 	return &pb.AuthResponse{Token: token}, nil
@@ -150,36 +159,50 @@ func generateToken(username string) (string, error) {
 }
 
 func (s *ChatServer) AuthInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	if info.FullMethod != "/ChatService/Register" && info.FullMethod != "/ChatService/Login" {
-		md, ok := metadata.FromIncomingContext(ctx)
-		if !ok {
-			return nil, status.Errorf(codes.Unauthenticated, "No metadata provided")
-		}
-
-		token := md["authorization"]
-		if len(token) == 0 {
-			return nil, status.Errorf(codes.Unauthenticated, "No token provided")
-		}
-
-		claims := &jwt.MapClaims{}
-		_, err := jwt.ParseWithClaims(token[0], claims, func(token *jwt.Token) (interface{}, error) {
-			return []byte("dogdogdog"), nil
-		})
-		if err != nil {
-			return nil, status.Errorf(codes.Unauthenticated, "Invalid token")
-		}
-
-		username := (*claims)["username"].(string)
-
-		// verify token against redis
-		storedToken, err := storage.GetToken(s.redisClient, username)
-		if err != nil || storedToken != token[0] {
-			return nil, status.Errorf(codes.Unauthenticated, "Invalid or expired token")
-		}
-
-		newCtx := context.WithValue(ctx, "username", username)
-		return handler(newCtx, req)
-
+	logger.Log.Info("AuthInterceptor called for method", zap.String("method", info.FullMethod))
+	if info.FullMethod == "/chat.ChatService/Login" || info.FullMethod == "/chat.ChatService/Register" {
+		logger.Log.Info("Hit login or register point")
+		return handler(ctx, req)
 	}
-	return handler(ctx, req)
+
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		logger.Log.Error("No metadata provided")
+		return nil, status.Errorf(codes.Unauthenticated, "No metadata provided")
+	}
+
+	token := md["authorization"]
+	if len(token) == 0 {
+		return nil, status.Errorf(codes.Unauthenticated, "No token provided")
+	}
+
+	claims := &jwt.MapClaims{}
+	_, err := jwt.ParseWithClaims(token[0], claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte("dogdogdog"), nil
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "Invalid token")
+	}
+
+	username := (*claims)["username"].(string)
+
+	// verify token against redis
+	storedToken, err := storage.GetToken(s.redisClient, username)
+	if err != nil {
+		if err == redis.Nil {
+			// token doesn't exist in redis
+			return nil, status.Errorf(codes.Unauthenticated, "Token not found or expired")
+		}
+
+		// some other error occured
+		logger.Log.Error("Error retrieving token from redis: ", zap.Error(err))
+		return nil, status.Errorf(codes.Internal, "Error verifying token")
+	}
+
+	if storedToken != token[0] {
+		return nil, status.Errorf(codes.Unauthenticated, "Invalid token")
+	}
+
+	newCtx := context.WithValue(ctx, "username", username)
+	return handler(newCtx, req)
 }
