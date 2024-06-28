@@ -52,7 +52,9 @@ func main() {
 		logger.Log.Fatal("Failed to listen", zap.Error(err))
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(chatServer.AuthInterceptor),
+	)
 
 	// register chatservice
 	pb.RegisterChatServiceServer(grpcServer, chatServer)

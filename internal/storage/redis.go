@@ -100,3 +100,41 @@ func PublishMessage(client *redis.Client, channel string, message *pb.ChatMessag
 func SubscribeToMessages(client *redis.Client, channel string) *redis.PubSub {
 	return client.Subscribe(context.Background(), channel)
 }
+
+func SaveUser(client *redis.Client, username, hashedPassword string) error {
+	ctx := context.Background()
+	key := fmt.Sprintf("user:%s", username)
+
+	return client.HSet(ctx, key,
+		"username", username,
+		"password", hashedPassword,
+	).Err()
+}
+
+func GetUser(client *redis.Client, username string) (string, error) {
+	ctx := context.Background()
+	key := fmt.Sprintf("token:%s", username)
+
+	return client.HGet(ctx, key, "password").Result()
+}
+
+func SaveToken(client *redis.Client, username, token string, expiration time.Duration) error {
+	ctx := context.Background()
+	key := fmt.Sprintf("token: %s", username)
+
+	return client.HSet(ctx, key, expiration).Err()
+}
+
+func GetToken(client *redis.Client, username string) (string, error) {
+	ctx := context.Background()
+	key := fmt.Sprintf("token: %s", username)
+
+	return client.Get(ctx, key).Result()
+}
+
+func deleteToken(client *redis.Client, username string) error {
+	ctx := context.Background()
+	key := fmt.Sprintf("token: %s", username)
+
+	return client.Del(ctx, key).Err()
+}

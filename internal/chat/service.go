@@ -84,9 +84,19 @@ func (s *ChatServer) StreamMessages(empty *pb.Empty, stream pb.ChatService_Strea
 
 func (s *ChatServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.AuthResponse, error) {
 	// check if usernamex already exists and hash password
+	_, err := storage.GetUser(s.redisClient, req.Username)
+	if err != nil {
+		return nil, status.Errorf(codes.AlreadyExists, "Username already exists")
+	}
+
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to hash password")
+	}
+
+	err = storage.SaveUser(s.redisClient, req.Username, string(hashedPassword))
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to save user: %v", err)
 	}
 
 	// store username and hashed password in db
@@ -95,13 +105,23 @@ func (s *ChatServer) Register(ctx context.Context, req *pb.RegisterRequest) (*pb
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to generate token")
 	}
+
+	err = storage.SaveToken(s.redisClient, req.Username, token, 24*time.Hour)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to save token: %v", err)
+	}
 	return &pb.AuthResponse{Token: token}, nil
 }
 
 func (s *ChatServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.AuthResponse, error) {
 	// Retrieve hashed password for username from database
+	hashedPassword, err := storage.GetUser(s.redisClient, req.Username)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "User not found: %v", err)
+	}
+
 	// Compare passwords
-	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(req.Password))
+	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(req.Password))
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "Invalid credentials")
 	}
@@ -111,6 +131,13 @@ func (s *ChatServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.AuthR
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to generate token")
 	}
+
+	// save token to redis
+	err = storage.SaveToken(s.redisClient, req.Username, token, 24*time.Hour)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to save token: %v", err)
+	}
+
 	return &pb.AuthResponse{Token: token}, nil
 }
 
@@ -122,7 +149,7 @@ func generateToken(username string) (string, error) {
 	return token.SignedString([]byte("dogdogdog"))
 }
 
-func authInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func (s *ChatServer) AuthInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	if info.FullMethod != "/ChatService/Register" && info.FullMethod != "/ChatService/Login" {
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
@@ -142,8 +169,17 @@ func authInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServe
 			return nil, status.Errorf(codes.Unauthenticated, "Invalid token")
 		}
 
-		newCtx := context.WithValue(ctx, "username", (*claims)["username"])
+		username := (*claims)["username"].(string)
+
+		// verify token against redis
+		storedToken, err := storage.GetToken(s.redisClient, username)
+		if err != nil || storedToken != token[0] {
+			return nil, status.Errorf(codes.Unauthenticated, "Invalid or expired token")
+		}
+
+		newCtx := context.WithValue(ctx, "username", username)
 		return handler(newCtx, req)
+
 	}
 	return handler(ctx, req)
 }
