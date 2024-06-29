@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Room: {{.RoomName}}</title>
+    <script>
+        var roomName = "{{.RoomName}}";
+        var socket = new WebSocket("ws://" + window.location.host + "/ws/" + roomName);
+        
+        socket.onmessage = function(event) {
+            var message = JSON.parse(event.data);
+            var chatBox = document.getElementById("chat-box");
+            chatBox.innerHTML += "<p><strong>" + message.user + ":</strong> " + message.message + "</p>";
+            chatBox.scrollTop = chatBox.scrollHeight;
+        };
+    </script>
+</head>
+<body>
+    <h1>Chat Room: {{.RoomName}}</h1>
+    <div id="chat-box" style="height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px;"></div>
+    <p>Messages can only be sent from the Go client.</p>
+</body>
+</html>

@@ -25,6 +25,9 @@ func ValidateMessage(msg *pb.ChatMessage) error {
 	if msg.Timestamp == 0 {
 		return status.Error(codes.InvalidArgument, "Message must not be empty")
 	}
+	if msg.Room == "" {
+		return status.Error(codes.InvalidArgument, "Room must not be empty")
+	}
 
 	return nil
 }

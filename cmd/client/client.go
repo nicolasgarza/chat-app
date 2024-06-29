@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -42,8 +43,12 @@ func main() {
 		}
 	}
 
+	fmt.Print("Enter chat room: ")
+	room, _ := reader.ReadString('\n')
+	room = strings.TrimSpace(room)
+
 	// start goroutine to recieve messages
-	go recieveMessages(client, ctx)
+	go recieveMessages(client, ctx, room)
 
 	// send messages from user input
 	for {
@@ -55,7 +60,7 @@ func main() {
 			return
 		}
 
-		sendMessage(client, ctx, username, message)
+		sendMessage(client, ctx, username, message, room)
 	}
 }
 
@@ -83,11 +88,12 @@ func register(client pb.ChatServiceClient, username, password string) (context.C
 	return ctx, nil
 }
 
-func sendMessage(client pb.ChatServiceClient, ctx context.Context, username, message string) {
+func sendMessage(client pb.ChatServiceClient, ctx context.Context, username, message, room string) {
 	msg := &pb.ChatMessage{
 		User:      username,
 		Message:   message,
 		Timestamp: time.Now().Unix(),
+		Room:      room,
 	}
 
 	_, err := client.SendMessage(ctx, msg)
@@ -98,11 +104,26 @@ func sendMessage(client pb.ChatServiceClient, ctx context.Context, username, mes
 	}
 }
 
-func recieveMessages(client pb.ChatServiceClient, ctx context.Context) {
-	stream, err := client.StreamMessages(ctx, &pb.Empty{})
+func recieveMessages(client pb.ChatServiceClient, ctx context.Context, room string) {
+	stream, err := client.StreamMessages(ctx, &pb.StreamMessagesRequest{Room: room})
 	if err != nil {
 		log.Fatalf("Error opening stream: %v", err)
 	}
+
+	fmt.Println("--- Last 15 messages ---")
+	for i := 0; i < 15; i++ {
+		msg, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+
+			log.Printf("Error recieving messages: %v", err)
+			return
+		}
+		log.Printf("[%s] %s: %s", msg.Room, msg.User, msg.Message)
+	}
+	fmt.Println("--- End of last Messages ---")
 
 	for {
 		msg, err := stream.Recv()
@@ -110,6 +131,6 @@ func recieveMessages(client pb.ChatServiceClient, ctx context.Context) {
 			log.Printf("Error recieving messages: %v", err)
 			return
 		}
-		log.Printf("Received: %s from %s", msg.Message, msg.User)
+		log.Printf("[%s] %s: %s", msg.Room, msg.Message, msg.User)
 	}
 }

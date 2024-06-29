@@ -7,6 +7,7 @@ import (
 	pb "chat_app/pb"
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt/v5"
@@ -47,18 +48,34 @@ func (s *ChatServer) SendMessage(ctx context.Context, msg *pb.ChatMessage) (*pb.
 		return nil, status.Errorf(codes.Internal, "Failed to save message")
 	}
 
-	if err := storage.PublishMessage(s.redisClient, "chat_messages", msg); err != nil {
+	channel := fmt.Sprintf("chat_messages:%s", msg.Room)
+	if err := storage.PublishMessage(s.redisClient, channel, msg); err != nil {
 		logger.Log.Error("Failed to publish message", zap.Error(err))
 		return nil, status.Errorf(codes.Internal, "Failed to publish message")
 	}
 
-	logger.Log.Info("Message sent", zap.String("user", msg.User), zap.String("message", msg.Message))
+	logger.Log.Info("Message sent", zap.String("user", msg.User), zap.String("room", msg.Room), zap.String("message", msg.Message))
 	return &pb.Empty{}, nil
 }
 
-func (s *ChatServer) StreamMessages(empty *pb.Empty, stream pb.ChatService_StreamMessagesServer) error {
-	logger.Log.Info("New client connected to message stream")
-	pubsub := storage.SubscribeToMessages(s.redisClient, "chat_messages")
+func (s *ChatServer) StreamMessages(req *pb.StreamMessagesRequest, stream pb.ChatService_StreamMessagesServer) error {
+	logger.Log.Info("New client connected to message stream", zap.String("room,", req.Room))
+
+	lastMessages, err := storage.GetLastNMessages(s.redisClient, req.Room, 15)
+	if err != nil {
+		logger.Log.Error("Failed to fetch last messages", zap.Error(err))
+	} else {
+		// send last messages to the client
+		for _, msg := range lastMessages {
+			if err := stream.Send(msg); err != nil {
+				LogStreamEnded(err)
+				return err
+			}
+		}
+	}
+
+	channel := fmt.Sprintf("chat_messages:%s", req.Room)
+	pubsub := storage.SubscribeToMessages(s.redisClient, channel)
 	defer pubsub.Close()
 
 	ch := pubsub.Channel()

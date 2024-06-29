@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
 
@@ -21,23 +22,39 @@ var upgrader = websocket.Upgrader{
 }
 
 func startWebServer(redisClient *redis.Client) {
-	http.HandleFunc("/", handleHome)
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	r := mux.NewRouter()
+
+	r.HandleFunc("/", handleHome)
+	r.HandleFunc("/room/", handleRoom)
+	r.HandleFunc("/ws/{roomName}", func(w http.ResponseWriter, r *http.Request) {
 		handleWebSocket(w, r, redisClient)
 	})
 
 	log.Println("Starting web server on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(":8080", r); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
-	tmpl := template.Must(template.ParseFiles("templates/index.html"))
+	tmpl := template.Must(template.ParseFiles("templates/home.html"))
 	tmpl.Execute(w, nil)
 }
 
+func handleRoom(w http.ResponseWriter, r *http.Request) {
+	roomName := r.URL.Query().Get("roomName")
+	if roomName == "" {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	tmpl := template.Must(template.ParseFiles("templates/room.html"))
+	tmpl.Execute(w, map[string]string{"RoomName": roomName})
+}
+
 func handleWebSocket(w http.ResponseWriter, r *http.Request, redisClient *redis.Client) {
+	vars := mux.Vars(r)
+	roomName := vars["roomName"]
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -45,8 +62,8 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request, redisClient *redis.
 	}
 	defer conn.Close()
 
-	// Subscribe to Redis channel
-	pubsub := storage.SubscribeToMessages(redisClient, "chat_messages")
+	// Subscribe to Redis channel for the specific room
+	pubsub := storage.SubscribeToMessages(redisClient, "chat_messages:"+roomName)
 	defer pubsub.Close()
 
 	channel := pubsub.Channel()
@@ -63,6 +80,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request, redisClient *redis.
 			"user":      chatMessage.User,
 			"message":   chatMessage.Message,
 			"timestamp": chatMessage.Timestamp,
+			"room":      chatMessage.Room,
 		}
 
 		if err := conn.WriteJSON(messageData); err != nil {
