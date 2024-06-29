@@ -32,7 +32,7 @@ type ChatServiceClient interface {
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*AuthResponse, error)
 	Login(ctx context.Context, in *LoginRequest, opts ...grpc.CallOption) (*AuthResponse, error)
 	SendMessage(ctx context.Context, in *ChatMessage, opts ...grpc.CallOption) (*Empty, error)
-	StreamMessages(ctx context.Context, in *Empty, opts ...grpc.CallOption) (ChatService_StreamMessagesClient, error)
+	StreamMessages(ctx context.Context, in *StreamMessagesRequest, opts ...grpc.CallOption) (ChatService_StreamMessagesClient, error)
 }
 
 type chatServiceClient struct {
@@ -73,7 +73,7 @@ func (c *chatServiceClient) SendMessage(ctx context.Context, in *ChatMessage, op
 	return out, nil
 }
 
-func (c *chatServiceClient) StreamMessages(ctx context.Context, in *Empty, opts ...grpc.CallOption) (ChatService_StreamMessagesClient, error) {
+func (c *chatServiceClient) StreamMessages(ctx context.Context, in *StreamMessagesRequest, opts ...grpc.CallOption) (ChatService_StreamMessagesClient, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[0], ChatService_StreamMessages_FullMethodName, cOpts...)
 	if err != nil {
@@ -113,7 +113,7 @@ type ChatServiceServer interface {
 	Register(context.Context, *RegisterRequest) (*AuthResponse, error)
 	Login(context.Context, *LoginRequest) (*AuthResponse, error)
 	SendMessage(context.Context, *ChatMessage) (*Empty, error)
-	StreamMessages(*Empty, ChatService_StreamMessagesServer) error
+	StreamMessages(*StreamMessagesRequest, ChatService_StreamMessagesServer) error
 }
 
 // UnimplementedChatServiceServer should be embedded to have forward compatible implementations.
@@ -129,7 +129,7 @@ func (UnimplementedChatServiceServer) Login(context.Context, *LoginRequest) (*Au
 func (UnimplementedChatServiceServer) SendMessage(context.Context, *ChatMessage) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendMessage not implemented")
 }
-func (UnimplementedChatServiceServer) StreamMessages(*Empty, ChatService_StreamMessagesServer) error {
+func (UnimplementedChatServiceServer) StreamMessages(*StreamMessagesRequest, ChatService_StreamMessagesServer) error {
 	return status.Errorf(codes.Unimplemented, "method StreamMessages not implemented")
 }
 
@@ -199,7 +199,7 @@ func _ChatService_SendMessage_Handler(srv interface{}, ctx context.Context, dec 
 }
 
 func _ChatService_StreamMessages_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(Empty)
+	m := new(StreamMessagesRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
