@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	// "net"
 	"chat_app/config"
 	"chat_app/internal/chat"
@@ -37,7 +38,11 @@ func main() {
 	)
 
 	// init chatserver
-	redisClient, err := storage.NewRedisClient("localhost:6379")
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
+	redisClient, err := storage.NewRedisClient(redisAddr)
 	if err != nil {
 		logger.Log.Fatal("Failed to connect to Redis", zap.Error(err))
 	}
