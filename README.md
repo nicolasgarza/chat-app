@@ -1,6 +1,6 @@
 # chat-app
 
-This is a chat app built in Go. 
+An HTML and WebSockets chat application built in Go. 
 
 Features:
 
@@ -8,22 +8,34 @@ Features:
 
 - Multiple users
 
-- Web ui to view chatrooms
+- Web UI to view chatrooms
 
-## Usage
+## Installation
+**Redis** - Install Redis to handle authentication https://redis.io/downloads/
 
-1. Git clone the repository
+```
+$ git clone https://github.com/nicolasgarza/chat-app/
+$ cd chat-app
+$ redis-server
+$ go run cmd/server/*.go
+```
 
-2. cd to the directory
+In a separate terminal window, run this command:
+```
+$ go run cmd/client/client.go
+```
 
-3. Run the following commands in seperate terminal shells:
+### Using the CLI
+client.go is a CLI that spawns a new user and allows you to send messages.
 
-- redis-server (make sure you have redis installed)
+### Adding users
+Open another terminal shell and run client.go to spawn a new user in a chatroom.
 
-- go run cmd/server/*.go
+### Sending messages
+Once you run client.go, you will be prompted to send messages.
 
-- go run cmd/client/client.go
+### Viewing messages
+Open http://localhost:8080 in a browser to view the messages in different chatrooms.
 
-client.go offers a CLI to send messages to chatrooms. You can open another terminal shell and run client.go again to add another user to the chatroom.
-
-Open localhost:8080 to view the messages in the chatrooms.
+### Terminating the sessions
+Use Ctrl+c in the terminal session where the server is running to terminate the application.
